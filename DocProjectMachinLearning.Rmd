@@ -1,0 +1,162 @@
+---
+title: "Machine Learning Final Project: Prediction Assignment Writeup"
+author: "Julie Ramirez"
+date: "17/6/2021"
+output: html_document
+---
+
+# Background.
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: 
+
+[http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har]()
+
+(see the section on the Weight Lifting Exercise Dataset).
+
+# Data.
+
+The training data for this project are available here:
+
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv]()
+
+The test data are available here:
+
+[https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv]()
+
+The data for this project come from this source:
+
+[http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har](). 
+
+If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+# A short description of the datasets.
+
+“Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg)."
+
+# load libraries.
+
+```{r message=FALSE, warning=FALSE}
+library(knitr)
+library(caret)
+library(rattle) 
+library(ggplot2)
+library(lattice)
+set.seed(12345)
+```
+
+# Getting Data.
+
+```{r}
+# Getting data
+
+urltesting<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+urltraining<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+```
+
+```{r message=FALSE, warning=FALSE}
+# load data to memory
+
+download.file(url=urltraining, destfile="training.csv")
+download.file(url=urltesting, destfile="testing.csv")
+```
+
+```{r}
+train <- read.csv("training.csv", na.strings=c("NA","#DIV/0!",""))
+dim(train)
+```
+
+```{r}
+test <- read.csv("testing.csv", na.strings=c("NA","#DIV/0!",""))
+dim(test)
+```
+
+# Cleaning Data.
+
+```{r}
+# remove variables with Nearly Zero Variance
+NZV <- nearZeroVar(train)   # function of caret
+train <- train[, -NZV]
+dim(train)
+```
+
+With the cleaning process above, the number of variables for the analysis has been reduced to 124.
+
+```{r}
+train <- train[, -c(1:6)]
+```
+
+As the first 6 predictors have little predicting power, these are eliminated in the the train sets. The number of variables for the analysis has been reduced to 118.
+
+```{r}
+train<-train[, colSums(is.na(train)) == 0]
+dim(train)
+```
+
+Variables with missing are deleted. With the cleaning process above, the number of variables for the analysis has been reduced to 53 only.
+
+# Partition with the train dataset.
+
+```{r}
+intrain <- createDataPartition(y=train$classe, p=0.7, list=FALSE)
+dat_train <- train[intrain, ]
+dat_test <- train[-intrain, ]
+```
+
+```{r}
+dim(dat_test)
+dim(dat_train)
+```
+
+# Method: Random Forest.
+
+```{r}
+controlRF <- trainControl(method="cv", number=5, verboseIter=FALSE)
+modFitRF<- train(classe ~ ., data=dat_train, method="rf",
+                          trControl=controlRF)
+modFitRF$finalModel
+modFitRF
+```
+
+```{r}
+# prediction on dat_test dataset
+predictRF <- predict(modFitRF, newdata=dat_test)
+
+dat_test$classe<-as.factor(dat_test$classe)
+
+confusionmatrixRF <- confusionMatrix(predictRF, dat_test$classe)
+confusionmatrixRF
+```
+
+```{r}
+predictFinalRF<- predict(modFitRF, test)
+predictFinalRF
+```
+
+# Method: Decision Tree.
+
+```{r}
+modFit_DecisionTree<-train(classe ~ ., data=dat_train, method="rpart")
+modFit_DecisionTree
+modFit_DecisionTree$finalModel
+```
+
+```{r}
+# plot Tree
+
+fancyRpartPlot(modFit_DecisionTree$finalModel)
+```
+
+```{r}
+# Predicting new values
+
+predict_DecisionTree <- predict(modFit_DecisionTree, newdata=dat_test)
+```
+
+```{r}
+confusionmatrix_DeciTree <- confusionMatrix(predict_DecisionTree, dat_test$classe)
+confusionmatrix_DeciTree
+```
+
+From the confusion matrix, the accuracy rate is 0.49, and so the out-of-sample error rate is 0.5. Using classification tree does not predict the outcome classe very well.
